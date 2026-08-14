@@ -3,6 +3,8 @@ import { sessionEpilogue } from "../../src/util/presentation"
 
 test("formats session continuation summary", () => {
   const epilogue = sessionEpilogue({ title: "A session", sessionID: "ses_123" })
+  const plain = epilogue.replace(/\x1b\[[0-9;]*m/g, "")
   expect(epilogue).toContain("A session")
-  expect(epilogue).toContain("opencode -s ses_123")
+  expect(epilogue).toContain("flakecode -s ses_123")
+  expect(plain).toContain("▗▄▄▄▖▗▖    ▗▄▖ ▗▖ ▗▖▗▄▄▄▖")
 })
