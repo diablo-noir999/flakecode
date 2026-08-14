@@ -78,6 +78,8 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
+import { FlakeBackground } from "../../component/flake-background"
+import { useVisualMode } from "../../context/visual"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
@@ -267,6 +269,11 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const visual = useVisualMode()
+  const isRunning = createMemo(() => {
+    const status = sync.data.session_status[route.sessionID]
+    return status?.type === "busy" || status?.type === "retry"
+  })
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -1157,6 +1164,9 @@ export function Session() {
 
   return (
     <LocationProvider location={location()}>
+      <Show when={visual.vivid()}>
+        <FlakeBackground animated={visual.motion} running={isRunning} />
+      </Show>
       <context.Provider
         value={{
           get width() {

@@ -450,4 +450,6 @@ export const node = LayerNode.make({
   deps: [Config.node, Auth.node, Plugin.node, Skill.node, Provider.node, locationServiceMapNode],
 })
 
+export const defaultLayer = layer
+
 export * as Agent from "./agent"

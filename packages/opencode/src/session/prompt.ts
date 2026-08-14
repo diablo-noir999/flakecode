@@ -696,7 +696,7 @@ const layer = Layer.effect(
         id: part.id ? PartID.make(part.id) : PartID.ascending(),
       })
 
-      const resolvePart: (part: PromptInput["parts"][number]) => Effect.Effect<Draft<SessionV1.Part>[]> = Effect.fn(
+      const resolvePart = Effect.fn(
         "SessionPrompt.resolveUserPart",
       )(function* (part) {
         if (part.type === "file") {
@@ -990,7 +990,7 @@ const layer = Layer.effect(
         }
 
         return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
-      })
+      }) as (part: PromptInput["parts"][number]) => Effect.Effect<Draft<SessionV1.Part>[]>
 
       const resolvedParts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: "unbounded" }).pipe(
         Effect.map((x) => x.flat().map(assign)),
@@ -1078,7 +1078,7 @@ const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
-    const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
+    const runLoop = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
         let structured: unknown
@@ -1338,7 +1338,7 @@ const layer = Layer.effect(
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
         return yield* lastAssistant(sessionID)
       },
-    )
+    ) as (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts>
 
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,
@@ -1627,5 +1627,7 @@ export const node = LayerNode.make({
     Database.node,
   ],
 })
+
+export const defaultLayer = layer
 
 export * as SessionPrompt from "./prompt"

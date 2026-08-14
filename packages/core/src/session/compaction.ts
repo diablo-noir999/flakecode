@@ -8,6 +8,12 @@ import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { Token } from "../util/token"
+import {
+  writeCheckpoint,
+  loadCheckpoint,
+  computeBoundary,
+} from "./checkpoint"
+import { buildRebuildContext, readBudgeted } from "./checkpoint-rebuild"
 
 const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 8_000
@@ -44,6 +50,9 @@ Rules:
 - Use terse bullets, not prose paragraphs.
 - Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when known.
 - Do not mention the summary process or that context was compacted.`
+
+// Checkpoint intervals: write at every 10% context fill
+const CHECKPOINT_INTERVAL_PERCENT = 10
 
 type Entry = {
   readonly seq: number
@@ -85,29 +94,41 @@ export const serializeToolContent = (content: SessionMessage.ToolStateCompleted[
 
 const serialize = (message: SessionMessage.Message) => {
   if (message.type === "user") {
-    const files = message.files?.map((file) => `[Attached ${file.mime}: ${file.name ?? file.uri}]`) ?? []
-    return [`[User]: ${message.text}`, ...files].join("\n")
+    const msg = message as SessionMessage.User
+    const files = msg.files?.map((file) => `[Attached ${file.mime}: ${file.name ?? file.uri}]`) ?? []
+    return [`[User]: ${msg.text}`, ...files].join("\n")
   }
   if (message.type === "assistant") {
-    return message.content
-      .flatMap((part) => {
-        if (part.type === "text") return [`[Assistant]: ${part.text}`]
-        if (part.type === "reasoning") return part.text ? [`[Assistant reasoning]: ${part.text}`] : []
-        const input = typeof part.state.input === "string" ? part.state.input : JSON.stringify(part.state.input)
-        if (part.state.status === "completed")
-          return [
-            `[Assistant tool call]: ${part.name}(${input})`,
-            `[Tool result]: ${truncate(serializeToolContent(part.state.content))}`,
-          ]
-        if (part.state.status === "error")
-          return [`[Assistant tool call]: ${part.name}(${input})`, `[Tool error]: ${part.state.error.message}`]
-        return [`[Assistant tool call]: ${part.name}(${input})`]
+    const msg = message as SessionMessage.Assistant
+    return msg.content
+      .flatMap((part: SessionMessage.AssistantContent) => {
+        if (part.type === "text") return [`[Assistant]: ${(part as SessionMessage.AssistantText).text}`]
+        if (part.type === "reasoning") {
+          const r = part as SessionMessage.AssistantReasoning
+          return r.text ? [`[Assistant reasoning]: ${r.text}`] : []
+        }
+        if (part.type === "tool") {
+          const tool = part as SessionMessage.AssistantTool
+          const input = typeof tool.state.input === "string" ? tool.state.input : JSON.stringify(tool.state.input)
+          if (tool.state.status === "completed")
+            return [
+              `[Assistant tool call]: ${tool.name}(${input})`,
+              `[Tool result]: ${truncate(serializeToolContent(tool.state.content))}`,
+            ]
+          if (tool.state.status === "error")
+            return [`[Assistant tool call]: ${tool.name}(${input})`, `[Tool error]: ${tool.state.error.message}`]
+          return [`[Assistant tool call]: ${tool.name}(${input})`]
+        }
+        return []
       })
       .join("\n")
   }
-  if (message.type === "system") return `[System update]: ${message.text}`
-  if (message.type === "synthetic") return `[Synthetic context]: ${message.text}`
-  if (message.type === "shell") return `[Shell]: ${message.command}\n${truncate(message.output)}`
+  if (message.type === "system") return `[System update]: ${(message as SessionMessage.System).text}`
+  if (message.type === "synthetic") return `[Synthetic context]: ${(message as SessionMessage.Synthetic).text}`
+  if (message.type === "shell") {
+    const msg = message as SessionMessage.Shell
+    return `[Shell]: ${msg.command}\n${truncate(msg.output)}`
+  }
   return ""
 }
 
@@ -167,12 +188,80 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
     ...input.context,
   ].join("\n\n")
 
+/**
+ * Compute the current context fill percentage based on token usage.
+ * Returns a number between 0 and 100.
+ */
+function computeContextFillPercent(
+  request: LLMRequest,
+  model: Model,
+): number {
+  const context = model.route.defaults.limits?.context
+  if (context === undefined || context <= 0) return 0
+  const totalTokens = estimate({
+    system: request.system,
+    messages: request.messages,
+    tools: request.tools,
+  })
+  return Math.floor((totalTokens / context) * 100)
+}
+
+/**
+ * Determine which 10% checkpoint we're at.
+ * Returns the threshold (10, 20, 30, ...) or 0 if below first threshold.
+ */
+function currentCheckpointThreshold(fillPercent: number): number {
+  return Math.floor(fillPercent / CHECKPOINT_INTERVAL_PERCENT) * CHECKPOINT_INTERVAL_PERCENT
+}
+
 export const make = (dependencies: Dependencies) => {
   const config = settings(dependencies.config)
+  const checkpointState = new Map<SessionSchema.ID, number>()
+
   const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: Input) {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
+
+    // Check if a checkpoint exists and use it for rebuild
+    const checkpoint = yield* Effect.tryPromise({
+      try: () => loadCheckpoint(input.sessionID),
+      catch: () => undefined,
+    }).pipe(Effect.catch(() => Effect.succeed(undefined)))
+
+    if (checkpoint) {
+      // Use checkpoint-based rebuild instead of LLM summary
+      const messages = input.entries.map((e) => e.message)
+      const selected = select(input.entries, config.tokens)
+      if (!selected) return false
+
+      const rebuildContext = buildRebuildContext(checkpoint, messages, {
+        recentTokens: config.tokens,
+      })
+
+      if (!rebuildContext) return false
+
+      const messageID = SessionMessage.ID.create()
+      yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
+        sessionID: input.sessionID,
+        messageID,
+        timestamp: yield* DateTime.now,
+        reason: "auto",
+      })
+
+      // Emit the rebuild context as the compaction summary
+      yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
+        sessionID: input.sessionID,
+        messageID,
+        timestamp: yield* DateTime.now,
+        reason: "auto",
+        text: rebuildContext,
+        recent: selected.recent,
+      })
+      return true
+    }
+
+    // Fallback to LLM-based summarization
     const selected = select(input.entries, config.tokens)
     const previousSummary = input.entries.find((entry) => entry.message.type === "compaction")?.message
     if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return false
@@ -222,11 +311,30 @@ export const make = (dependencies: Dependencies) => {
     })
     return true
   })
+
   const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: Input) {
     if (!config.auto) return false
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
+
+    // Check context fill and maybe write checkpoint
+    const lastPercent = checkpointState.get(input.sessionID) ?? 0
+    const fillPercent = computeContextFillPercent(input.request, input.model)
+    const threshold = currentCheckpointThreshold(fillPercent)
+
+    if (threshold > lastPercent && input.entries.length > 0) {
+      // Write checkpoint (non-blocking via fork)
+      const messages = input.entries.map((e) => e.message)
+      yield* Effect.tryPromise({
+        try: async () => {
+          await writeCheckpoint(input.sessionID, messages)
+          checkpointState.set(input.sessionID, threshold)
+        },
+        catch: () => undefined,
+      }).pipe(Effect.catch(() => Effect.succeed(undefined)))
+    }
+
     if (
       estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
       context - Math.max(output, config.buffer)
@@ -234,6 +342,7 @@ export const make = (dependencies: Dependencies) => {
       return false
     return yield* compactAfterOverflow(input)
   })
+
   return {
     compactIfNeeded,
     compactAfterOverflow,

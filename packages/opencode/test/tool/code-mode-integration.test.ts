@@ -159,10 +159,10 @@ async function buildTool() {
   }
 }
 
-const run = (code: string) => Effect.runPromise(tool.execute({ code }, ctx))
+const run = (code: string) => Effect.runPromise(tool.execute({ code }, ctx) as Effect.Effect<any, never, never>)
 // Program failures die at the tool boundary; recover the defect for message assertions.
 const runFailed = async (code: string) => {
-  const exit = await Effect.runPromise(tool.execute({ code }, ctx).pipe(Effect.exit))
+  const exit = await Effect.runPromise((tool.execute({ code }, ctx) as Effect.Effect<any, never, never>).pipe(Effect.exit))
   if (Exit.isSuccess(exit)) throw new Error("expected the tool to fail")
   return Cause.squash(exit.cause) as Error
 }
@@ -248,7 +248,7 @@ describe("code mode integration (real MCP server)", () => {
     `)
     expect(out.output).toBe("two shots: 2")
     expect(out.attachments).toHaveLength(2)
-    expect(out.metadata.toolCalls.map((c) => c.tool)).toEqual(["fixtures.screenshot", "fixtures.screenshot"])
+    expect(out.metadata.toolCalls.map((c: any) => c.tool)).toEqual(["fixtures.screenshot", "fixtures.screenshot"])
   })
 
   test("propagates an MCP isError into the program as a catchable error", async () => {
@@ -307,7 +307,7 @@ describe("code mode integration (real MCP server)", () => {
           `,
         },
         permCtx,
-      ),
+      ) as Effect.Effect<any, never, never>,
     )
     expect(asked).toEqual(["fixtures_add", "fixtures_get_text"])
   })
@@ -319,7 +319,7 @@ describe("code mode integration (real MCP server)", () => {
       metadata: (val: any) => Effect.sync(() => void snapshots.push(val.metadata)),
     }
     await Effect.runPromise(
-      tool.execute({ code: "await tools.fixtures.add({ a: 1, b: 2 }); return 'done'" }, recordingCtx),
+      tool.execute({ code: "await tools.fixtures.add({ a: 1, b: 2 }); return 'done'" }, recordingCtx) as Effect.Effect<any, never, never>,
     )
     expect(snapshots).toContainEqual({
       toolCalls: [{ tool: "fixtures.add", status: "running", input: { a: 1, b: 2 } }],

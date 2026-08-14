@@ -16,6 +16,18 @@ import {
   WithParts,
 } from "@opencode-ai/core/v1/session"
 
+export type OutputFormat =
+  | { type: "text" }
+  | { type: "json_schema"; schema: Record<string, unknown>; retryCount?: number }
+
+export type Provenance = {
+  source: "spawn" | "hook" | "user"
+  actorID?: string
+  parentSessionID?: string
+}
+
+export type { WithParts, Part }
+
 import { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Database } from "@opencode-ai/core/database/database"

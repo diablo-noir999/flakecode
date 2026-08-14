@@ -20,6 +20,10 @@
     "./effect/app-node": "./src/effect/app-node.ts",
     "./session/runner": "./src/session/runner/index.ts",
     "./system-context": "./src/system-context/index.ts",
+    "./history": "./src/history/index.ts",
+    "./history/*": "./src/history/*.ts",
+    "./memory": "./src/memory/index.ts",
+    "./memory/*": "./src/memory/*.ts",
     "./*": "./src/*.ts"
   },
   "imports": {

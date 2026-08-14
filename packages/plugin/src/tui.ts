@@ -394,6 +394,7 @@ export type TuiState = {
     question: (sessionID: string) => ReadonlyArray<QuestionRequest>
   }
   part: (messageID: string) => ReadonlyArray<Part>
+  instructions?: () => ReadonlyArray<string>
   lsp: () => ReadonlyArray<TuiSidebarLspItem>
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
 }

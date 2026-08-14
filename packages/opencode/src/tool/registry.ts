@@ -54,6 +54,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
+import { TaskRegistry } from "@/task/registry"
 
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
   return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
@@ -86,6 +87,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/To
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    yield* TaskRegistry.Service
     const config = yield* Config.Service
     const plugin = yield* Plugin.Service
     const agents = yield* Agent.Service
@@ -421,7 +423,7 @@ function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
 
 export const node = LayerNode.make({
   service: Service,
-  layer,
+  layer: layer.pipe(Layer.provide(TaskRegistry.defaultLayer)),
   deps: [
     Config.node,
     Plugin.node,
@@ -444,7 +446,7 @@ export const node = LayerNode.make({
     MCP.node,
     Database.node,
     Ripgrep.node,
-  ],
+  ] as any,
 })
 
 export * as ToolRegistry from "./registry"

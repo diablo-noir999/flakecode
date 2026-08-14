@@ -364,8 +364,9 @@ function runWebSearch(p: ToolProps<typeof WebSearchTool>): ToolInline {
 }
 
 function runTask(p: ToolProps<typeof TaskTool>): ToolInline {
-  const kind = Locale.titlecase(p.input.subagent_type || "unknown")
-  const desc = p.input.description
+  const input = p.input as Record<string, unknown>
+  const kind = Locale.titlecase((input.subagent_type as string) || "unknown")
+  const desc = input.description as string | undefined
   const icon = p.frame.status === "error" ? "✗" : p.frame.status === "running" ? "•" : "✓"
   return {
     icon,
@@ -569,8 +570,9 @@ function snapPatch(p: ToolProps<typeof ApplyPatchTool>): ToolSnapshot | undefine
 }
 
 function snapTask(p: ToolProps<typeof TaskTool>): ToolSnapshot {
-  const kind = Locale.titlecase(p.input.subagent_type || "general")
-  const desc = p.input.description
+  const input = p.input as Record<string, unknown>
+  const kind = Locale.titlecase((input.subagent_type as string) || "general")
+  const desc = input.description as string | undefined
   const title = text(p.frame.state.title)
   const rows = [desc || title].filter((item): item is string => Boolean(item))
 
@@ -779,8 +781,9 @@ function scrollTaskFinal(p: ToolProps<typeof TaskTool>): string {
     return fail(p.frame)
   }
 
-  const kind = Locale.titlecase(p.input.subagent_type || "general")
-  const row = p.input.description || text(p.frame.state.title)
+  const input = p.input as Record<string, unknown>
+  const kind = Locale.titlecase((input.subagent_type as string) || "general")
+  const row = (input.description as string) || text(p.frame.state.title)
   if (!row) {
     return `# ${kind} Task`
   }
@@ -975,8 +978,9 @@ function permBash(p: ToolPermissionProps<typeof BashTool>): ToolPermissionInfo {
 }
 
 function permTask(p: ToolPermissionProps<typeof TaskTool>): ToolPermissionInfo {
-  const type = p.input.subagent_type || "general"
-  const desc = p.input.description
+  const input = p.input as Record<string, unknown>
+  const type = (input.subagent_type as string) || "general"
+  const desc = input.description as string | undefined
   return {
     icon: "#",
     title: `${Locale.titlecase(type)} Task`,

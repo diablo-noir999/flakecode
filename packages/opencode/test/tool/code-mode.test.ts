@@ -79,7 +79,10 @@ function build(
       Effect.flatMap(Tool.init),
       Effect.provide(harness({ mcpTools, servers: names, permission, trigger })),
     ),
-  )
+  ).then((tool) => ({
+    ...tool,
+    execute: (args: unknown, ctx: Tool.Context) => tool.execute(args, ctx) as Effect.Effect<any, never, never>,
+  }))
 }
 
 function describeFor(mcpTools: Record<string, MCP.McpTool>, servers?: string[], permission: PermissionV1.Rule[] = []) {
@@ -332,8 +335,8 @@ describe("code mode execute", () => {
     )
 
     expect(output.output).toBe("12")
-    expect(output.metadata.toolCalls.map((c) => c.tool).sort()).toEqual(["echo.one", "echo.two"])
-    expect(output.metadata.toolCalls.every((c) => c.status === "completed")).toBe(true)
+    expect(output.metadata.toolCalls.map((c: any) => c.tool).sort()).toEqual(["echo.one", "echo.two"])
+    expect(output.metadata.toolCalls.every((c: any) => c.status === "completed")).toBe(true)
   })
 
   test("a program failure fails the tool with a readable error", async () => {

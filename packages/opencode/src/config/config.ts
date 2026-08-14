@@ -678,4 +678,6 @@ export const node = LayerNode.make({
   deps: [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, httpClient],
 })
 
+export const defaultLayer = layer
+
 export * as Config from "./config"

@@ -330,8 +330,8 @@ describe("tool.registry", () => {
         },
         required: ["query"],
       })
-      expect(Result.isSuccess(Schema.decodeUnknownResult(loaded.parameters)({ query: "select 1" }))).toBe(true)
-      expect(Result.isSuccess(Schema.decodeUnknownResult(loaded.parameters)({}))).toBe(false)
+      expect(Result.isSuccess(Schema.decodeUnknownResult(loaded.parameters as Schema.Decoder<unknown>)({ query: "select 1" }))).toBe(true)
+      expect(Result.isSuccess(Schema.decodeUnknownResult(loaded.parameters as Schema.Decoder<unknown>)({}))).toBe(false)
 
       const agents = yield* Agent.Service
       const promptTools = yield* registry.tools({

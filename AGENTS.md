@@ -1,71 +1,157 @@
-- To regenerate the legacy JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
-- After changing the public Protocol or Server `HttpApi`, run `bun run generate` from `packages/client`. Do not edit `src/generated` or `src/generated-effect` directly.
-- Keep runtime dependencies directed from Schema to Core and Protocol, then from Core and Protocol to Server. Client runtime code may depend on Schema and Protocol but never Core or Server; `sdk-next` composes Client, Core, and Server.
-- The default branch in this repo is `dev`.
-- Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
+# Agent Instructions
 
-## Branch Names
+You are running with the Powerpack plugin for OpenCode.
 
-Use a short branch name of at most three words, separated by hyphens. Do not use slashes or type prefixes such as `feat/` or `fix/`.
+---
 
-Examples: `session-recovery`, `fix-scroll-state`, `regenerate-sdk`.
+## Boot Sequence — Every Session, Before Anything Else
 
-## Commits and PR Titles
+```
+1. memory_search("<project-name> <task-keywords>")
+   → if results: read them before touching any file
+   → if empty: proceed, but write to memory at your first decision
 
-Use conventional commit-style messages and PR titles: `type(scope): summary`.
+2. task create "<one-line summary of what you're about to do>"
+   → note the ID (T1, T2, ...) — you'll need it
 
-Valid types are `feat`, `fix`, `docs`, `chore`, `refactor`, and `test`. Scopes are optional; use the affected package or area when helpful, e.g. `core`, `opencode`, `tui`, `app`, `desktop`, `sdk`, or `plugin`.
+3. context_breakdown()
+   → only if context already feels large; check before adding more
+```
 
-Examples: `fix(tui): simplify thinking toggle styling`, `docs: update contributing guide`, `chore(sdk): regenerate types`.
+That's it. Three calls, then work.
 
-## Style Guide
+---
+
+## How to Use Each Tool
+
+### memory_search — before every task, before every design decision
+
+```
+memory_search("auth token refresh")
+→ returns: "BUG_FIX 2024-01-10: refresh tokens expire silently, must check exp field not iat"
+→ action: check exp field before writing any token logic
+```
+
+For relationship queries ("how does X relate to Y", "what depends on auth.ts"):
+```
+memory_search("auth middleware", mode: "graph")
+→ traverses knowledge graph → returns connected nodes and edges
+```
+
+If it returns nothing, proceed — but write your findings when you're done.
+
+**What to search:** project name, the module you're touching, the bug symptom, the feature name. Cast wide first, narrow if too many results.
+
+---
+
+### memory_write — after every decision, not at end of session
+
+```
+memory_write({
+  category: "BUG_FIX",
+  content: "Fixed null dereference in auth.ts:42 — was checking user.id before null guard. Always check user != null first."
+})
+```
+
+Categories: `PROJECT_RULES` · `ARCHITECTURE` · `CONSTRAINTS` · `CONFIG_VALUES` · `NAMING` · `LESSONS_LEARNED` · `BUG_FIXES` · `USER_PREFERENCES`
+
+Write immediately after the decision. If you wait until end of session, you'll forget or get compacted.
+
+---
+
+### task tool — one entry per non-trivial unit of work
+
+```
+task create "Fix null dereference in auth token refresh"   → T1
+task start T1
+  ... do the work ...
+task done T1
+```
+
+Subtasks: `T1.1`, `T1.2`. Mark done the moment work completes — never batch.
+
+---
+
+### Subagent dispatch — the safe way to spawn
+
+```
+1. Read the agent description to confirm it matches your task
+
+2. Spawn with appropriate agent:
+   - @code-reviewer — for code review with P0-P3 severity
+   - @debugger — for root cause analysis and bug diagnosis
+   - @test-engineer — for writing positive+negative tests
+   - @security-engineer — for security review and vulnerability detection
+   - @refactoring-specialist — for safe incremental refactoring
+   - @historian — for history compression
+   - @dreamer — for memory consolidation
+
+3. Keep working while the subagent runs (if async)
+
+4. Verify the result when it returns
+```
+
+---
+
+## Subagent-First Rule
+
+**Default to delegating.** For any task that involves more than reading 3 files or making more than 2 edits, spawn a subagent to do the work. You analyze results and verify — you don't do the work yourself.
+
+Why: Working directly bloats your context window. A subagent with a focused prompt uses 10-50x fewer tokens than you doing the same work inline.
+
+**Decision guide:**
+- Read 1-2 files → do it yourself
+- Read 3+ files → spawn @code-reviewer or appropriate agent
+- Edit 1-2 files, simple changes → do it yourself
+- Edit 3+ files or complex changes → spawn appropriate agent
+- Code review → spawn @code-reviewer
+- Security audit → spawn @security-engineer
+- Debugging → spawn @debugger
+- Writing tests → spawn @test-engineer
+
+---
+
+## Workflow Table
+
+| Stage | When | Skill | Delegate To |
+|-------|------|-------|-------------|
+| Explore | New codebase, unfamiliar module, >3 queries | `memory-search` | @code-reviewer or do yourself |
+| Plan | Multi-file change, ambiguity, multiple valid approaches | Plan mode → user approves → exit | Do yourself (planning = thinking, not typing) |
+| Build | Plan approved or task is clear | — | Appropriate agent per task |
+| Verify | Before any "done" claim | — | @code-reviewer + @test-engineer |
+| Checkpoint | Every milestone, before context gets large | — | Do yourself, write to memory |
+
+---
+
+## Agent Dispatch
+
+| Task | Agent |
+|------|-------|
+| Security review, vulnerability detection | @security-engineer |
+| Root cause analysis, bug diagnosis | @debugger |
+| Test authoring (positive + negative) | @test-engineer |
+| Code review with P0-P3 severity | @code-reviewer |
+| Safe incremental refactoring | @refactoring-specialist |
+| History compression | @historian |
+| Memory consolidation | @dreamer |
+
+---
+
+## Code Style Rules
 
 ### General Principles
 
-- Keep things in one function unless composable or reusable
-- Do not extract single-use helpers preemptively. Inline the logic at the call site unless the helper is reused, hides a genuinely complex boundary, or has a clear independent name that improves the caller.
+- Do NOT add comments unless explicitly asked
+- Prefer `const` over `let`
+- Avoid `else` statements — use early returns
+- Avoid unnecessary destructuring — use dot notation
+- Reduce total variable count by inlining when a value is only used once
+- Prefer functional array methods (flatMap, filter, map) over for loops
+- Never use `any` type — use proper type inference
 - Avoid `try`/`catch` where possible
-- Avoid using the `any` type
-- Use Bun APIs when possible, like `Bun.file()`
-- Rely on type inference when possible; avoid explicit type annotations or interfaces unless necessary for exports or clarity
-- Prefer functional array methods (flatMap, filter, map) over for loops; use type guards on filter to maintain type inference downstream
-- In `src/config`, follow the existing self-export pattern at the top of the file (for example `export * as ConfigAgent from "./agent"`) when adding a new config module.
-- In Effect generators, bind services to named variables before calling methods. Do not use nested service yields such as `yield* (yield* Foo.Service).bar()`.
-
-Reduce total variable count by inlining when a value is only used once.
-
-```ts
-// Good
-const journal = await Bun.file(path.join(dir, "journal.json")).json()
-
-// Bad
-const journalPath = path.join(dir, "journal.json")
-const journal = await Bun.file(journalPath).json()
-```
-
-### Destructuring
-
-Avoid unnecessary destructuring. Use dot notation to preserve context.
-
-```ts
-// Good
-obj.a
-obj.b
-
-// Bad
-const { a, b } = obj
-```
-
-### Imports
-
-- Never alias imports. Do not use `import { foo as bar } from "..."` or renamed imports like `resolve as pathResolve`.
-- Never use star imports. Do not use `import * as Foo from "..."` or `import type * as Foo from "..."`.
-- If a namespace-style value is needed, import the module's own exported namespace by name, for example `import { Project } from "@opencode-ai/core/project"`, then reference `Project.ID`.
-- Prefer dynamic imports for heavy modules that are only needed in selected code paths, especially in startup-sensitive entrypoints. Destructure dynamic import bindings near the top of the narrowest scope that needs them so they read like normal imports. Avoid inline chains such as `await import("./module").then((mod) => mod.value())` or `(await import("./module")).value()`. Keep branch-specific imports inside the branch that needs them to preserve lazy loading.
+- Keep things in one function unless composable or reusable
 
 ### Variables
-
-Prefer `const` over `let`. Use ternaries or early returns instead of reassignment.
 
 ```ts
 // Good
@@ -78,8 +164,6 @@ else foo = 2
 ```
 
 ### Control Flow
-
-Avoid `else` statements. Prefer early returns.
 
 ```ts
 // Good
@@ -95,67 +179,48 @@ function foo() {
 }
 ```
 
-### Complex Logic
-
-When a function has several validation branches or supporting details, make the main function read as the happy path and move supporting details into small helpers below it.
+### Destructuring
 
 ```ts
 // Good
-export function loadThing(input: unknown) {
-  const config = requireConfig(input)
-  const metadata = readMetadata(input)
-  return createThing({ config, metadata })
-}
-
-function requireConfig(input: unknown) {
-  ...
-}
-```
-
-- Keep helpers close to the code they support, below the main export when that improves readability.
-- Do not over-abstract simple expressions into many single-use helpers; extract only when it names a real concept like `requireConfig` or `readMetadata`.
-- Do not return `Effect` from helpers unless they actually perform effectful work. Synchronous parsing, validation, and option building should stay synchronous.
-- Prefer Effect schema helpers such as `Schema.UnknownFromJsonString` and `Schema.decodeUnknownOption` over manual `JSON.parse` wrapped in `Effect.try` when parsing untrusted JSON strings.
-- Add comments for non-obvious constraints and surprising behavior, not for obvious assignments or control flow.
-
-### Schema Definitions (Drizzle)
-
-Use snake_case for field names so column names don't need to be redefined as strings.
-
-```ts
-// Good
-const table = sqliteTable("session", {
-  id: text().primaryKey(),
-  project_id: text().notNull(),
-  created_at: integer().notNull(),
-})
+obj.a
+obj.b
 
 // Bad
-const table = sqliteTable("session", {
-  id: text("id").primaryKey(),
-  projectID: text("project_id").notNull(),
-  createdAt: integer("created_at").notNull(),
-})
+const { a, b } = obj
 ```
+
+### Imports
+
+- Never alias imports
+- Never use star imports
+- Prefer dynamic imports for heavy modules
+
+---
 
 ## Testing
 
-- Avoid mocks as much as possible, you shouldn't be using globalThis.\* at all unless it's the only option.
 - Test actual implementation, do not duplicate logic into tests
-- Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/opencode`.
+- Avoid mocks as much as possible
+- Run type checking from package directories, never `tsc` directly
+- Use `bun typecheck` for type checking
 
-## Type Checking
+---
 
-- Always run `bun typecheck` from package directories (e.g., `packages/opencode`), never `tsc` directly.
+## Skills
 
-## V2 Session Core
+Load with `skill("name")`. Match skill to stage.
 
-- Keep durable prompt admission separate from model execution. `SessionV2.prompt(...)` admits one durable `session_input` row before scheduling advisory `SessionExecution.wake(sessionID)` unless `resume: false` requests admit-only behavior. The serialized runner promotes admitted inputs into visible user messages at safe boundaries.
-- Reusing a Session ID adopts the existing Session. Reusing a prompt message ID reconciles an exact retry only when Session, prompt, and delivery mode match; conflicting reuse fails. Historical projected prompts lazily synthesize promoted inbox records during exact retry.
-- Keep `SessionExecution` process-global and Session-ID based. Its local implementation owns the process-local Session coordinator and discovers placement through `SessionStore` plus `LocationServiceMap.get(session.location)` only when a drain starts; no layer should take a Session ID. V2 interruption targets the active process-local ownership chain for that Session; idle or missing interruption is a no-op.
-- Keep `SessionRunner`, model resolution, tool registry, permissions, and filesystem Location-scoped. Omitted `Location.workspaceID` means implicit-local placement; explicit workspace identity remains reserved for future placement semantics.
-- Preserve one explicit `llm.stream(request)` call per provider turn and reload projected history before durable continuation. Do not bridge through legacy `SessionPrompt.loop(...)` or delegate orchestration to an in-memory tool loop.
-- Keep local Session drains process-local until clustering is implemented. `SessionRunCoordinator` joins explicit same-Session resumes, coalesces prompt wakeups, and allows different Sessions to run concurrently. Advisory wakes drain eligible durable inbox rows only; post-crash continuation recovery requires a separate explicit design before it may retry provider work. A drain has no durable identity or transcript boundary.
-- Keep delivery vocabulary explicit. Prompts steer by default and promote at the next safe provider-turn boundary while the current drain requires continuation. An explicit `queue` input remains pending until the Session would otherwise become idle; promote one queued input at that boundary, then reevaluate continuation before promoting another. Promoting any new user input resets the selected agent's provider-turn allowance; a batch of steers resets it once.
-- Keep EventV2 replay owner claims separate from clustered Session execution ownership.
-- Keep the System Context algebra, registry, and built-ins in `src/system-context`; keep Context Source producers with their observed domains, and keep Session History selection plus Context Epoch persistence Session-owned.
+| Skill | Load When |
+|-------|-----------|
+| `memory-search` | Querying structured data across sessions |
+| `memory-reconciler` | Resolving conflicts in memory store |
+| `memory-usage-checker` | Auditing memory store health |
+| `memory-import` | Importing knowledge from external sources |
+| `memory-export` | Exporting memories for backup or migration |
+| `loop-until-done` | Iterative task until completion signal |
+| `proximity-rules` | Auto-inject rules near edited files |
+| `evolve` | Self-modification of capabilities |
+| `pdf` | Reading PDF documents |
+| `web-curl` | Making HTTP requests |
+| `todo` | Managing task lists |

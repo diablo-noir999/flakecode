@@ -22,3 +22,25 @@ export function containsPath(filepath: string, ctx: InstanceContext): boolean {
   if (ctx.worktree === "/") return false
   return FSUtil.contains(ctx.worktree, filepath)
 }
+
+export const Instance = {
+  get worktree(): string {
+    try {
+      return context.use().worktree
+    } catch {
+      return ""
+    }
+  },
+  async provide<T>(input: { directory: string; fn: () => Promise<T> }): Promise<T> {
+    return context.provide(
+      { directory: input.directory, worktree: input.directory, project: {} as Project.Info },
+      input.fn,
+    )
+  },
+  async current(): Promise<InstanceContext> {
+    return context.use()
+  },
+  async disposeDirectory(_directory: string): Promise<void> {
+    // No-op: cleanup is handled by ScopedCache in InstanceState
+  },
+}

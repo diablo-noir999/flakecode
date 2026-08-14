@@ -8,6 +8,7 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
 
 export const Event = PermissionV1.Event
+export type Ruleset = PermissionV1.Ruleset
 
 export interface Interface {
   readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>
@@ -219,5 +220,7 @@ export function visibleTools<T>(tools: Record<string, T>, ruleset: PermissionV1.
 }
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
+
+export const defaultLayer = layer
 
 export * as Permission from "."
