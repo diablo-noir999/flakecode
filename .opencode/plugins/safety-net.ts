@@ -85,8 +85,8 @@ function gitSubcmd(tokens: readonly string[]): { sub: string | null; rest: strin
   while (i < tokens.length) {
     const t = tokens[i]; if (!t) break
     if (t === "--") { const n = tokens[i + 1]; return n && !n.startsWith("-") ? { sub: n, rest: tokens.slice(i + 2) } : { sub: null, rest: tokens.slice(i + 1) } }
-    t.startsWith("-") ? i++ : (() => { return { sub: t, rest: tokens.slice(i + 1) } })()
-    break
+    if (t.startsWith("-")) { i++; continue }
+    return { sub: t, rest: tokens.slice(i + 1) }
   }
   return { sub: null, rest: [] }
 }
